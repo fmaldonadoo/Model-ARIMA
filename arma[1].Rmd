@@ -1,0 +1,210 @@
+---
+title: "Untitled"
+output:
+  html_document:
+    df_print: paged
+date: "2023-07-27"
+---
+
+```{r}
+library(BatchGetSymbols)
+library(tidyverse)
+library(ggthemes) 
+library(FinTS)
+library(WriteXLS)
+library(xtable)
+library(tbl2xts)
+library(forecast)
+library(tseries)
+library(timeSeries)
+library(quantmod)
+library(dplyr)
+```
+```{r}
+#ticker IBOVESPA
+tickers<-c("^BVSP")
+
+ibov<- BatchGetSymbols(tickers,
+                                 first.date = '2021-01-01',
+                                 last.date = Sys.time(),
+                                 type.return = "log",
+                                 freq.data = "daily")
+
+ibov <- ibov[[2]]
+```
+
+```{r}
+daily_returns <- ibov %>% 
+  select(ref.date,ret.closing.prices)
+
+date <- daily_returns %>%
+  select(ref.date) %>% 
+  rename(date = ref.date) %>% 
+  slice(-1)
+
+daily_returns <- daily_returns %>%
+  select(ret.closing.prices) %>% 
+  slice(-1)
+
+
+daily_returns=as.ts(daily_returns)
+```
+
+
+```{r}
+acf(daily_returns, lag.max=36) 
+pacf(daily_returns, lag.max=36) 
+
+
+```
+```{r}
+tsdisplay(daily_returns)
+```
+
+```{r}
+x=arima(daily_returns,order=c(1,0,0)) 
+x
+
+```
+```{r}
+tsdiag(x)
+Box.test(x$residuals,lag=1) 
+Box.test(residuals(x),  type="Ljung")
+acf(residuals(x))
+pacf(residuals(x))
+plot.ts(x$residuals)
+
+```
+
+```{r}
+plot.ts(x$residuals)
+```
+###exercício 2
+```{r}
+forecast<-predict(x,n.ahead=5) 
+
+predict(x, n.ahead = 15, se.fit=T)
+```
+```{r}
+plot(daily_returns, col="red")
+lines(fitted(x),col="blue")
+```
+
+```{r}
+auto.arima(daily_returns)
+```
+```{r}
+fit_ARMA <- function(data) {
+  arma_model <- Arima(data, order=c(1, 0, 1))  # ARMA(1,1) neste exemplo
+  forecast <- forecast(arma_model, h = 1)
+  return(forecast$mean)
+}
+
+```
+
+#exercício 3
+```{r}
+df.sp500 = GetSP500Stocks()
+
+my.tickers = df.sp500$Tickers
+```
+```{r}
+
+df.sp500 = GetSP500Stocks()
+
+my.tickers = df.sp500$Tickers
+
+sp500 = BatchGetSymbols(tickers = my.tickers, 
+                        first.date = '2021-01-01',
+                       last.date = Sys.time(),
+                       type.return = 'log',
+                       freq.data = 'daily')
+```
+
+
+```{r}
+# Uma lista para armazenar os modelos ARIMA
+arima_models <- list()
+
+# Loop para ajustar modelos ARIMA individuais
+for (ticker in my.tickers) {
+return_series <- sp500$df.tickers$ret.closing.prices[sp500$df.tickers$ticker == ticker]
+
+# Ajustar o modelo ARIMA para cada ação usando a função auto.arima
+arima_model <- tryCatch(
+auto.arima(return_series),
+error = function(e) NULL
+)
+
+if (!is.null(arima_model)) {
+arima_models[[ticker]] <- arima_model
+}
+}
+
+# Loop para fazer previsões para todas as ações
+forecast_results <- list()
+for (ticker in names(arima_models)) {
+arima_model <- arima_models[[ticker]]
+
+# Fazer a previsão para o próximo período usando a função forecast
+forecast_value <- forecast(arima_model, h = 1)$mean[1]
+
+forecast_results[[ticker]] <- forecast_value
+}
+
+# Converter a lista de previsões em um dataframe
+forecast_df <- data.frame(
+ticker = names(forecast_results),
+forecast_value = unlist(forecast_results)
+)
+
+# Encontrar a ação com a maior expectativa de retorno para t+1
+best_stock <- forecast_df %>%
+arrange(desc(forecast_value)) %>%
+slice(1)
+
+# Imprimir o resultado
+print(best_stock)
+
+
+```
+
+#exercício 4
+
+```{r}
+# Uma lista para armazenar as previsões com retorno positivo
+positive_forecasts <- list()
+
+# Uma lista para armazenar as previsões com retorno negativo
+negative_forecasts <- list()
+
+# Loop para ajustar modelos ARIMA individuais e fazer previsões
+for (ticker in my.tickers) {
+return_series <- sp500$df.tickers$ret.closing.prices[sp500$df.tickers$ticker == ticker]
+
+# Ajustar o modelo ARIMA para cada ação usando a função auto.arima
+arima_model <- tryCatch(
+auto.arima(return_series),
+error = function(e) NULL
+)
+
+if (!is.null(arima_model)) {
+# Fazer a previsão para o próximo período usando a função forecast
+forecast_value <- forecast(arima_model, h = 1)$mean[1]
+
+# Armazenar a previsão em lista correspondente
+if (forecast_value > 0) {
+positive_forecasts[[ticker]] <- forecast_value
+} else {
+negative_forecasts[[ticker]] <- forecast_value
+}
+}
+}
+
+print(positive_forecasts)
+print(negative_forecasts)
+
+
+```
+
+#Se forem certas as previsões, é válido fazer uma estratégia lucrativa
